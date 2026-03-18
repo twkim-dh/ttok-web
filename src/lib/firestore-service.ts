@@ -169,25 +169,34 @@ export async function getAnswers(
   sessionId: string,
   respondentId?: string
 ): Promise<{ creator: Answer[]; respondent: Answer[] }> {
+  let creator: Answer[] = [];
+  let respondent: Answer[] = [];
+
+  // Try Firestore first
   if (isFirebaseConfigured && db) {
-    const q = query(
-      collection(db, "answers"),
-      where("sessionId", "==", sessionId)
-    );
-    const snap = await getDocs(q);
-    const all = snap.docs.map((d) => d.data() as Answer);
-    const creator = all.filter((a) => a.userType === "creator");
-    let respondent = all.filter((a) => a.userType === "respondent");
-    if (respondentId) {
-      respondent = respondent.filter((a) => a.respondentId === respondentId);
+    try {
+      const q = query(
+        collection(db, "answers"),
+        where("sessionId", "==", sessionId)
+      );
+      const snap = await getDocs(q);
+      const all = snap.docs.map((d) => d.data() as Answer);
+      creator = all.filter((a) => a.userType === "creator");
+      respondent = all.filter((a) => a.userType === "respondent");
+      if (respondentId) {
+        respondent = respondent.filter((a) => a.respondentId === respondentId);
+      }
+      console.log("[Firestore] getAnswers - creator:", creator.length, "respondent:", respondent.length);
+    } catch (err) {
+      console.error("[Firestore] getAnswers failed:", err);
     }
-    return { creator, respondent };
   }
 
-  // localStorage fallback
-  const creator = lsGet<Answer[]>(`answers:${sessionId}:creator`) ?? [];
-  let respondent: Answer[] = [];
-  if (respondentId) {
+  // Fallback: if Firestore returned empty, try localStorage
+  if (creator.length === 0) {
+    creator = lsGet<Answer[]>(`answers:${sessionId}:creator`) ?? [];
+  }
+  if (respondent.length === 0 && respondentId) {
     respondent = lsGet<Answer[]>(`answers:${sessionId}:respondent:${respondentId}`) ?? [];
   }
   return { creator, respondent };
