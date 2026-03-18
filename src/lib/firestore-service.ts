@@ -67,11 +67,18 @@ export async function createSession(
     createdAt: new Date().toISOString(),
   };
 
+  // Always save to localStorage (same device fallback)
+  lsSet(`session:${id}`, session);
+  lsSet(`shareCode:${shareCode}`, id);
+
+  // Also save to Firestore (cross-device sharing)
   if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, "sessions", id), session);
-  } else {
-    lsSet(`session:${id}`, session);
-    lsSet(`shareCode:${shareCode}`, id);
+    try {
+      await setDoc(doc(db, "sessions", id), session);
+      console.log("[Firestore] Session saved:", shareCode);
+    } catch (err) {
+      console.error("[Firestore] Failed to save session:", err);
+    }
   }
 
   return session;
@@ -84,17 +91,24 @@ export async function createSession(
 export async function getSessionByShareCode(
   shareCode: string
 ): Promise<Session | null> {
+  // Try Firestore first (cross-device)
   if (isFirebaseConfigured && db) {
-    const q = query(
-      collection(db, "sessions"),
-      where("shareCode", "==", shareCode)
-    );
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    return snap.docs[0].data() as Session;
+    try {
+      const q = query(
+        collection(db, "sessions"),
+        where("shareCode", "==", shareCode)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        console.log("[Firestore] Session found for shareCode:", shareCode);
+        return snap.docs[0].data() as Session;
+      }
+    } catch (err) {
+      console.error("[Firestore] Query failed:", err);
+    }
   }
 
-  // localStorage fallback
+  // localStorage fallback (same device)
   const sessionId = lsGet<string>(`shareCode:${shareCode}`);
   if (!sessionId) return null;
   return lsGet<Session>(`session:${sessionId}`);
@@ -120,24 +134,29 @@ export async function saveAnswers(
     answeredAt: now,
   }));
 
-  if (isFirebaseConfigured && db) {
-    for (const answer of fullAnswers) {
-      await setDoc(doc(db, "answers", answer.id), answer);
-    }
+  // Always save to localStorage
+  if (userType === "creator") {
+    lsSet(`answers:${sessionId}:creator`, fullAnswers);
   } else {
-    if (userType === "creator") {
-      lsSet(`answers:${sessionId}:creator`, fullAnswers);
-    } else {
-      // 1:N — 응답자별로 저장
-      const key = `answers:${sessionId}:respondent:${respondentId}`;
-      lsSet(key, fullAnswers);
-      // 응답자 목록에 추가
-      const listKey = `respondents:${sessionId}`;
-      const list = lsGet<string[]>(listKey) ?? [];
-      if (!list.includes(respondentId!)) {
-        list.push(respondentId!);
-        lsSet(listKey, list);
+    const key = `answers:${sessionId}:respondent:${respondentId}`;
+    lsSet(key, fullAnswers);
+    const listKey = `respondents:${sessionId}`;
+    const list = lsGet<string[]>(listKey) ?? [];
+    if (respondentId && !list.includes(respondentId)) {
+      list.push(respondentId);
+      lsSet(listKey, list);
+    }
+  }
+
+  // Also save to Firestore
+  if (isFirebaseConfigured && db) {
+    try {
+      for (const answer of fullAnswers) {
+        await setDoc(doc(db, "answers", answer.id), answer);
       }
+      console.log("[Firestore] Answers saved:", fullAnswers.length);
+    } catch (err) {
+      console.error("[Firestore] Failed to save answers:", err);
     }
   }
 }
