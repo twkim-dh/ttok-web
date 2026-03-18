@@ -8,6 +8,7 @@ import {
   where,
   increment,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { nanoid } from "nanoid";
 import { db, isFirebaseConfigured } from "./firebase";
@@ -148,13 +149,16 @@ export async function saveAnswers(
     }
   }
 
-  // Also save to Firestore
+  // Also save to Firestore (batch write for speed)
   if (isFirebaseConfigured && db) {
     try {
+      const batch = writeBatch(db);
       for (const answer of fullAnswers) {
-        await setDoc(doc(db, "answers", answer.id), answer);
+        const ref = doc(db, "answers", answer.id);
+        batch.set(ref, answer);
       }
-      console.log("[Firestore] Answers saved:", fullAnswers.length);
+      await batch.commit();
+      console.log("[Firestore] Answers batch saved:", fullAnswers.length, "userType:", userType);
     } catch (err) {
       console.error("[Firestore] Failed to save answers:", err);
     }

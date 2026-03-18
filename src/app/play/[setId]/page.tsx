@@ -54,57 +54,37 @@ export default function PlayPage({ params }: PlayPageProps) {
       const newAnswers = [...answers, option];
       setAnswers(newAnswers);
 
-      setTimeout(async () => {
-        if (currentIndex < questions.length - 1) {
+      if (currentIndex < questions.length - 1) {
+        setTimeout(() => {
           setDirection(1);
           setSelectedOption(null);
           setCurrentIndex((prev) => prev + 1);
-        } else {
-          // Last question: create session and navigate
-          setIsSubmitting(true);
+        }, 500);
+      } else {
+        // Last question: show animation briefly then save
+        setIsSubmitting(true);
+        setTimeout(async () => {
           try {
             const creatorId = nanoid();
             const session = await createSession(creatorId, setId);
 
-            // Save creator answers
+            // Save creator answers (batch write)
             const answerPayloads = questions.map((q, idx) => ({
               questionId: q.id,
               selectedOption: newAnswers[idx] as 'A' | 'B',
             }));
             await saveAnswers(session.id, 'creator', answerPayloads);
-            await incrementPlayCount(setId);
+            console.log('[Play] Creator answers saved to Firestore for session:', session.shareCode);
+
+            try { await incrementPlayCount(setId); } catch {}
 
             router.push(`/share/${session.id}`);
           } catch (err) {
             console.error('Failed to save session:', err);
-            // Fallback: save to localStorage directly
-            const sessionId = nanoid();
-            const shareCode = nanoid(6);
-            const session = {
-              id: sessionId,
-              creatorId: nanoid(),
-              questionSetId: setId,
-              shareCode,
-              status: 'waiting' as const,
-              createdAt: new Date().toISOString(),
-            };
-            localStorage.setItem(`session:${sessionId}`, JSON.stringify(session));
-            localStorage.setItem(`shareCode:${shareCode}`, JSON.stringify(sessionId));
-
-            const answerPayloads = questions.map((q, idx) => ({
-              id: nanoid(),
-              sessionId,
-              userType: 'creator' as const,
-              questionId: q.id,
-              selectedOption: newAnswers[idx] as 'A' | 'B',
-              answeredAt: new Date().toISOString(),
-            }));
-            localStorage.setItem(`answers:${sessionId}:creator`, JSON.stringify(answerPayloads));
-
-            router.push(`/share/${sessionId}`);
+            router.push('/');
           }
-        }
-      }, 500);
+        }, 300);
+      }
     },
     [selectedOption, isSubmitting, answers, currentIndex, questions, setId, router]
   );
