@@ -126,14 +126,19 @@ export async function saveAnswers(
   respondentId?: string
 ): Promise<void> {
   const now = new Date().toISOString();
-  const fullAnswers: Answer[] = answers.map((a) => ({
-    ...a,
-    id: nanoid(),
-    sessionId,
-    userType,
-    respondentId,
-    answeredAt: now,
-  }));
+  const fullAnswers: Answer[] = answers.map((a) => {
+    const answer: Record<string, unknown> = {
+      ...a,
+      id: nanoid(),
+      sessionId,
+      userType,
+      answeredAt: now,
+    };
+    if (respondentId) {
+      answer.respondentId = respondentId;
+    }
+    return answer as Answer;
+  });
 
   // Always save to localStorage
   if (userType === "creator") {
