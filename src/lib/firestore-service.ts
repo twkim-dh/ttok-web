@@ -50,6 +50,52 @@ function lsGetAll<T>(prefix: string): T[] {
 }
 
 // ---------------------------------------------------------------------------
+// REST API fallback for Firestore writes
+// ---------------------------------------------------------------------------
+
+const FIRESTORE_PROJECT = "ttok-app";
+
+function toFirestoreValue(val: unknown): Record<string, unknown> {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === "string") return { stringValue: val };
+  if (typeof val === "number") return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  if (typeof val === "boolean") return { booleanValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreValue) } };
+  if (typeof val === "object") {
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      if (v !== undefined) fields[k] = toFirestoreValue(v);
+    }
+    return { mapValue: { fields } };
+  }
+  return { stringValue: String(val) };
+}
+
+function toFirestoreDoc(data: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined) fields[k] = toFirestoreValue(v);
+  }
+  return { fields };
+}
+
+async function restWrite(collectionName: string, docId: string, data: Record<string, unknown>): Promise<boolean> {
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${collectionName}/${docId}`;
+    const body = JSON.stringify(toFirestoreDoc(data));
+    const resp = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    return resp.ok;
+  } catch (err) {
+    console.error("[REST] Write failed:", err);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // createSession
 // ---------------------------------------------------------------------------
 
@@ -72,15 +118,9 @@ export async function createSession(
   lsSet(`session:${id}`, session);
   lsSet(`shareCode:${shareCode}`, id);
 
-  // Also save to Firestore (cross-device sharing)
-  if (isFirebaseConfigured && db) {
-    try {
-      await setDoc(doc(db, "sessions", id), session);
-      console.log("[Firestore] Session saved:", shareCode);
-    } catch (err) {
-      console.error("[Firestore] Failed to save session:", err);
-    }
-  }
+  // Save to Firestore via REST API
+  const ok = await restWrite("sessions", id, session as unknown as Record<string, unknown>);
+  console.log("[REST] Session saved:", shareCode, "success:", ok);
 
   return session;
 }
@@ -154,20 +194,13 @@ export async function saveAnswers(
     }
   }
 
-  // Also save to Firestore (batch write for speed)
-  if (isFirebaseConfigured && db) {
-    try {
-      const batch = writeBatch(db);
-      for (const answer of fullAnswers) {
-        const ref = doc(db, "answers", answer.id);
-        batch.set(ref, answer);
-      }
-      await batch.commit();
-      console.log("[Firestore] Answers batch saved:", fullAnswers.length, "userType:", userType);
-    } catch (err) {
-      console.error("[Firestore] Failed to save answers:", err);
-    }
-  }
+  // Save to Firestore via REST API (most reliable)
+  const restPromises = fullAnswers.map((answer) =>
+    restWrite("answers", answer.id, answer as unknown as Record<string, unknown>)
+  );
+  const results = await Promise.all(restPromises);
+  const savedCount = results.filter(Boolean).length;
+  console.log(`[REST] Answers saved: ${savedCount}/${fullAnswers.length}, userType: ${userType}`);
 }
 
 // ---------------------------------------------------------------------------
