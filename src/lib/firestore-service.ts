@@ -63,7 +63,7 @@ function toFirestoreValue(val: unknown): Record<string, unknown> {
   if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreValue) } };
   if (typeof val === "object") {
     const fields: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(val as unknown as Record<string, unknown>)) {
       if (v !== undefined) fields[k] = toFirestoreValue(v);
     }
     return { mapValue: { fields } };
@@ -177,7 +177,7 @@ export async function saveAnswers(
     if (respondentId) {
       answer.respondentId = respondentId;
     }
-    return answer as Answer;
+    return answer as unknown as Answer;
   });
 
   // Always save to localStorage
@@ -235,7 +235,7 @@ export async function getAnswers(
         const fields = item.document.fields;
         const answer: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(fields)) {
-          const val = v as Record<string, unknown>;
+          const val = v as unknown as Record<string, unknown>;
           if (val.stringValue !== undefined) answer[k] = val.stringValue;
           else if (val.integerValue !== undefined) answer[k] = Number(val.integerValue);
         }
@@ -244,7 +244,7 @@ export async function getAnswers(
       creator = all.filter((a) => a.userType === "creator");
       respondent = all.filter((a) => a.userType === "respondent");
       if (respondentId) {
-        respondent = respondent.filter((a) => (a as Record<string, unknown>).respondentId === respondentId);
+        respondent = respondent.filter((a) => (a as unknown as Record<string, unknown>).respondentId === respondentId);
       }
       console.log("[REST] getAnswers - creator:", creator.length, "respondent:", respondent.length);
     }
@@ -326,13 +326,13 @@ export async function getResult(
         const fields = data[0].document.fields;
         const result: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(fields)) {
-          const val = v as Record<string, unknown>;
+          const val = v as unknown as Record<string, unknown>;
           if (val.stringValue !== undefined) result[k] = val.stringValue;
           else if (val.integerValue !== undefined) result[k] = Number(val.integerValue);
           else if (val.doubleValue !== undefined) result[k] = Number(val.doubleValue);
           else if (val.mapValue) {
             const map: Record<string, number> = {};
-            const mf = (val.mapValue as Record<string, unknown>).fields as Record<string, Record<string, unknown>>;
+            const mf = (val.mapValue as unknown as Record<string, unknown>).fields as Record<string, Record<string, unknown>>;
             if (mf) {
               for (const [mk, mv] of Object.entries(mf)) {
                 map[mk] = Number(mv.integerValue ?? mv.doubleValue ?? 0);
@@ -388,7 +388,7 @@ export async function getSession(sessionId: string): Promise<Session | null> {
       const fields = data.fields;
       const session: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(fields)) {
-        const val = v as Record<string, unknown>;
+        const val = v as unknown as Record<string, unknown>;
         if (val.stringValue !== undefined) session[k] = val.stringValue;
         else if (val.integerValue !== undefined) session[k] = Number(val.integerValue);
       }
