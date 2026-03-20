@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "ttok-web.vercel.app" }],
+      "destination": "https://ttok.dhlm-studio.com/$1",
+      "permanent": true
+    }
+  ]
+}
