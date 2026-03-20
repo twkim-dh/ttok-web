@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import SyncRateCircle from '@/components/SyncRateCircle';
 import ResultBadge from '@/components/ResultBadge';
 import CategoryBar from '@/components/CategoryBar';
-import { getResult, getAnswers } from '@/lib/firestore-service';
+import { getResult, getAnswers, getSession } from '@/lib/firestore-service';
 import { getQuestionsBySetId, getQuestionSetById } from '@/data/questions';
 import { shareResult } from '@/lib/kakao';
 import { getBadge, getInterpretation } from '@/lib/result-calculator';
@@ -62,8 +62,8 @@ export default function ResultPage({ params }: ResultPageProps) {
         }
         setResult(r);
 
-        // Load session to get questionSetId
-        const session = getSessionFromStorage(sessionId);
+        // Load session to get questionSetId (Firestore first, then localStorage)
+        const session = await getSession(sessionId) || getSessionFromStorage(sessionId);
         const setId = session?.questionSetId || '';
         const qs = getQuestionsBySetId(setId);
         setQuestions(qs);

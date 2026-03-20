@@ -214,27 +214,45 @@ export async function getAnswers(
   let creator: Answer[] = [];
   let respondent: Answer[] = [];
 
-  // Try Firestore first
-  if (isFirebaseConfigured && db) {
-    try {
-      const q = query(
-        collection(db, "answers"),
-        where("sessionId", "==", sessionId)
-      );
-      const snap = await getDocs(q);
-      const all = snap.docs.map((d) => d.data() as Answer);
+  // Try REST API first (cross-device)
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:runQuery`;
+    const structuredQuery = {
+      from: [{ collectionId: "answers" }],
+      where: { fieldFilter: { field: { fieldPath: "sessionId" }, op: "EQUAL", value: { stringValue: sessionId } } },
+      limit: 200,
+    };
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ structuredQuery }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const all: Answer[] = [];
+      for (const item of data) {
+        if (!item.document) continue;
+        const fields = item.document.fields;
+        const answer: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(fields)) {
+          const val = v as Record<string, unknown>;
+          if (val.stringValue !== undefined) answer[k] = val.stringValue;
+          else if (val.integerValue !== undefined) answer[k] = Number(val.integerValue);
+        }
+        all.push(answer as unknown as Answer);
+      }
       creator = all.filter((a) => a.userType === "creator");
       respondent = all.filter((a) => a.userType === "respondent");
       if (respondentId) {
-        respondent = respondent.filter((a) => a.respondentId === respondentId);
+        respondent = respondent.filter((a) => (a as Record<string, unknown>).respondentId === respondentId);
       }
-      console.log("[Firestore] getAnswers - creator:", creator.length, "respondent:", respondent.length);
-    } catch (err) {
-      console.error("[Firestore] getAnswers failed:", err);
+      console.log("[REST] getAnswers - creator:", creator.length, "respondent:", respondent.length);
     }
+  } catch (err) {
+    console.error("[REST] getAnswers failed:", err);
   }
 
-  // Fallback: if Firestore returned empty, try localStorage
+  // Fallback to localStorage
   if (creator.length === 0) {
     creator = lsGet<Answer[]>(`answers:${sessionId}:creator`) ?? [];
   }
@@ -260,17 +278,16 @@ export async function saveResult(
     createdAt: new Date().toISOString(),
   };
 
-  if (isFirebaseConfigured && db) {
-    await setDoc(doc(db, "results", full.id), full);
-  } else {
-    // 1:N — 응답자별 결과 저장
-    lsSet(`result:${sessionId}:${result.respondentId}`, full);
-    // 전체 결과 목록에도 추가
-    const listKey = `results:${sessionId}`;
-    const list = lsGet<Result[]>(listKey) ?? [];
-    list.push(full);
-    lsSet(listKey, list);
-  }
+  // Save to localStorage
+  lsSet(`result:${sessionId}:${result.respondentId}`, full);
+  const listKey = `results:${sessionId}`;
+  const list = lsGet<Result[]>(listKey) ?? [];
+  list.push(full);
+  lsSet(listKey, list);
+
+  // Save to Firestore via REST API
+  await restWrite("results", full.id, full as unknown as Record<string, unknown>);
+  console.log("[REST] Result saved:", full.id);
 
   return id;
 }
@@ -283,21 +300,59 @@ export async function getResult(
   sessionId: string,
   respondentId?: string
 ): Promise<Result | null> {
-  if (isFirebaseConfigured && db) {
-    const constraints = [where("sessionId", "==", sessionId)];
-    if (respondentId) {
-      constraints.push(where("respondentId", "==", respondentId));
+  // Try REST API first (cross-device)
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:runQuery`;
+    const structuredQuery: Record<string, unknown> = {
+      from: [{ collectionId: "results" }],
+      where: {
+        compositeFilter: {
+          op: "AND",
+          filters: [
+            { fieldFilter: { field: { fieldPath: "sessionId" }, op: "EQUAL", value: { stringValue: sessionId } } },
+            ...(respondentId ? [{ fieldFilter: { field: { fieldPath: "respondentId" }, op: "EQUAL", value: { stringValue: respondentId } } }] : []),
+          ],
+        },
+      },
+    };
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ structuredQuery }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.length > 0 && data[0].document) {
+        const fields = data[0].document.fields;
+        const result: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(fields)) {
+          const val = v as Record<string, unknown>;
+          if (val.stringValue !== undefined) result[k] = val.stringValue;
+          else if (val.integerValue !== undefined) result[k] = Number(val.integerValue);
+          else if (val.doubleValue !== undefined) result[k] = Number(val.doubleValue);
+          else if (val.mapValue) {
+            const map: Record<string, number> = {};
+            const mf = (val.mapValue as Record<string, unknown>).fields as Record<string, Record<string, unknown>>;
+            if (mf) {
+              for (const [mk, mv] of Object.entries(mf)) {
+                map[mk] = Number(mv.integerValue ?? mv.doubleValue ?? 0);
+              }
+            }
+            result[k] = map;
+          }
+        }
+        console.log("[REST] getResult found:", result.id);
+        return result as unknown as Result;
+      }
     }
-    const q = query(collection(db, "results"), ...constraints);
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    return snap.docs[0].data() as Result;
+  } catch (err) {
+    console.error("[REST] getResult failed:", err);
   }
 
+  // Fallback to localStorage
   if (respondentId) {
     return lsGet<Result>(`result:${sessionId}:${respondentId}`);
   }
-  // 첫 번째 결과 반환 (하위호환)
   const list = lsGet<Result[]>(`results:${sessionId}`);
   return list && list.length > 0 ? list[0] : null;
 }
@@ -324,10 +379,24 @@ export async function getAllResults(sessionId: string): Promise<Result[]> {
 // ---------------------------------------------------------------------------
 
 export async function getSession(sessionId: string): Promise<Session | null> {
-  if (isFirebaseConfigured && db) {
-    const snap = await getDoc(doc(db, "sessions", sessionId));
-    if (!snap.exists()) return null;
-    return snap.data() as Session;
+  // Try REST API first
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/sessions/${sessionId}`;
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const data = await resp.json();
+      const fields = data.fields;
+      const session: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(fields)) {
+        const val = v as Record<string, unknown>;
+        if (val.stringValue !== undefined) session[k] = val.stringValue;
+        else if (val.integerValue !== undefined) session[k] = Number(val.integerValue);
+      }
+      console.log("[REST] getSession found:", sessionId);
+      return session as unknown as Session;
+    }
+  } catch (err) {
+    console.error("[REST] getSession failed:", err);
   }
   return lsGet<Session>(`session:${sessionId}`);
 }
