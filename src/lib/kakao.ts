@@ -87,10 +87,14 @@ export function shareTest(questionSet: QuestionSet, shareCode: string): void {
     ],
   };
 
+  console.log("[Kakao DEBUG] shareUrl:", shareUrl);
+  console.log("[Kakao DEBUG] params:", JSON.stringify(params, null, 2));
+
   if (isKakaoAvailable() && window.Kakao.isInitialized()) {
+    console.log("[Kakao DEBUG] SDK ready, calling sendDefault...");
     window.Kakao.Share.sendDefault(params);
   } else {
-    console.log("[Kakao Mock] shareTest:", params);
+    console.log("[Kakao Mock] SDK not ready. isAvailable:", isKakaoAvailable());
     console.log(`[Kakao Mock] Share URL: ${shareUrl}`);
   }
 }
