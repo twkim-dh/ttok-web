@@ -44,21 +44,24 @@ function isKakaoAvailable(): boolean {
 }
 
 export function initKakao(): void {
-  if (!isKakaoAvailable()) {
-    console.warn("[Kakao] SDK not loaded. Sharing will run in mock mode.");
-    return;
+  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY || "ea95354167038ebb0be11c1aae1ffe26";
+
+  function tryInit() {
+    if (typeof window === "undefined") return;
+    if (!window.Kakao) {
+      console.log("[Kakao] SDK not yet loaded, retrying in 500ms...");
+      setTimeout(tryInit, 500);
+      return;
+    }
+    if (!window.Kakao.isInitialized()) {
+      window.Kakao.init(kakaoKey);
+      console.log("[Kakao] SDK initialized.");
+    } else {
+      console.log("[Kakao] Already initialized.");
+    }
   }
 
-  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY;
-  if (!kakaoKey) {
-    console.warn("[Kakao] NEXT_PUBLIC_KAKAO_JS_KEY is not set.");
-    return;
-  }
-
-  if (!window.Kakao.isInitialized()) {
-    window.Kakao.init(kakaoKey);
-    console.log("[Kakao] SDK initialized.");
-  }
+  tryInit();
 }
 
 export function shareTest(questionSet: QuestionSet, shareCode: string): void {

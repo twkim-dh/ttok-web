@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import SyncRateCircle from '@/components/SyncRateCircle';
 import ResultBadge from '@/components/ResultBadge';
@@ -42,6 +42,8 @@ interface MatchDetail {
 export default function ResultPage({ params }: ResultPageProps) {
   const { sessionId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const respondentId = searchParams.get('rid') || undefined;
 
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,7 +57,7 @@ export default function ResultPage({ params }: ResultPageProps) {
     async function loadResult() {
       try {
         // Load result
-        const r = await getResult(sessionId);
+        const r = await getResult(sessionId, respondentId);
         if (!r) {
           setLoading(false);
           return;
