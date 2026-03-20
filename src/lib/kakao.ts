@@ -34,7 +34,7 @@ interface KakaoShareParams {
 
 function getBaseUrl(): string {
   if (typeof window !== "undefined") {
-    return window.location.origin;
+    return "https://ttok.dhlm-studio.com";
   }
   return process.env.NEXT_PUBLIC_BASE_URL || "https://ttok.app";
 }
