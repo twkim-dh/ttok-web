@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import ShareButtons from '@/components/ShareButtons';
 import { initKakao, shareTest } from '@/lib/kakao';
 import { getQuestionSetById } from '@/data/questions';
+import { getSession } from '@/lib/firestore-service';
 import type { Session } from '@/types';
 
 function getBaseUrl(): string {
@@ -60,9 +61,12 @@ export default function SharePage({ params }: SharePageProps) {
   }, []);
 
   useEffect(() => {
-    const s = getSessionFromStorage(sessionId);
-    setSession(s);
-    setLoading(false);
+    async function loadSession() {
+      const s = await getSession(sessionId);
+      setSession(s);
+      setLoading(false);
+    }
+    loadSession();
   }, [sessionId]);
 
   // Poll for respondent completion
