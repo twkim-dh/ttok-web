@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     siteName: "똑",
     images: [
       {
-        url: "/og-image.png",
+        url: "/og-v2.png",
         width: 1200,
         height: 630,
         alt: "똑 - 취향이 통하는 사이",
