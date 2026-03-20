@@ -8,7 +8,7 @@ import ResultBadge from '@/components/ResultBadge';
 import CategoryBar from '@/components/CategoryBar';
 import { getResult, getAnswers, getSession } from '@/lib/firestore-service';
 import { getQuestionsBySetId, getQuestionSetById } from '@/data/questions';
-import { shareResult } from '@/lib/kakao';
+import { initKakao, shareResult } from '@/lib/kakao';
 import { getBadge, getInterpretation } from '@/lib/result-calculator';
 import type { Result, Question, Answer } from '@/types';
 
@@ -52,6 +52,10 @@ export default function ResultPage({ params }: ResultPageProps) {
   const [oppositeMatches, setOppositeMatches] = useState<MatchDetail[]>([]);
   const [funSummary, setFunSummary] = useState('');
   const [questionSetTitle, setQuestionSetTitle] = useState('');
+
+  useEffect(() => {
+    initKakao();
+  }, []);
 
   useEffect(() => {
     async function loadResult() {
