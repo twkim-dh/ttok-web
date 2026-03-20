@@ -87,10 +87,16 @@ async function restWrite(collectionName: string, docId: string, data: Record<str
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body,
+      keepalive: true,
     });
-    return resp.ok;
+    const ok = resp.ok;
+    if (!ok) {
+      const errText = await resp.text();
+      console.error(`[REST] Write failed ${collectionName}/${docId}: ${resp.status} ${errText}`);
+    }
+    return ok;
   } catch (err) {
-    console.error("[REST] Write failed:", err);
+    console.error(`[REST] Write error ${collectionName}/${docId}:`, err);
     return false;
   }
 }

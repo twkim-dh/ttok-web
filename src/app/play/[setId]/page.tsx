@@ -61,29 +61,29 @@ export default function PlayPage({ params }: PlayPageProps) {
           setCurrentIndex((prev) => prev + 1);
         }, 500);
       } else {
-        // Last question: show animation briefly then save
+        // Last question: save immediately without setTimeout
         setIsSubmitting(true);
-        setTimeout(async () => {
-          try {
-            const creatorId = nanoid();
-            const session = await createSession(creatorId, setId);
 
-            // Save creator answers (batch write)
-            const answerPayloads = questions.map((q, idx) => ({
-              questionId: q.id,
-              selectedOption: newAnswers[idx] as 'A' | 'B',
-            }));
-            await saveAnswers(session.id, 'creator', answerPayloads);
-            console.log('[Play] Creator answers saved to Firestore for session:', session.shareCode);
+        try {
+          const creatorId = nanoid();
+          const session = await createSession(creatorId, setId);
 
-            try { await incrementPlayCount(setId); } catch {}
+          // Save creator answers (batch write) - must complete before navigation
+          const answerPayloads = questions.map((q, idx) => ({
+            questionId: q.id,
+            selectedOption: newAnswers[idx] as 'A' | 'B',
+          }));
+          await saveAnswers(session.id, 'creator', answerPayloads);
+          console.log('[Play] Creator answers saved for session:', session.shareCode);
 
-            router.push(`/share/${session.id}`);
-          } catch (err) {
-            console.error('Failed to save session:', err);
-            router.push('/');
-          }
-        }, 300);
+          try { await incrementPlayCount(setId); } catch {}
+
+          router.push(`/share/${session.id}`);
+        } catch (err) {
+          console.error('Failed to save session:', err);
+          setIsSubmitting(false);
+          alert('저장에 실패했습니다. 다시 시도해주세요.');
+        }
       }
     },
     [selectedOption, isSubmitting, answers, currentIndex, questions, setId, router]
