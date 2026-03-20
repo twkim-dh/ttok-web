@@ -29,7 +29,7 @@ export default function PlayPage({ params }: PlayPageProps) {
   useEffect(() => {
     const qs = getQuestionsBySetId(setId);
     const set = getQuestionSetById(setId);
-    // Shuffle questions randomly each time
+    // 셔플하지 않음! 출제자와 상대방이 같은 순서로 봐야 함
     setQuestions(qs);
     setQuestionSet(set);
   }, [setId]);
@@ -54,32 +54,39 @@ export default function PlayPage({ params }: PlayPageProps) {
       setAnswers(newAnswers);
 
       if (currentIndex < questions.length - 1) {
+        // 다음 질문으로 (애니메이션용 타이머만)
         setTimeout(() => {
           setDirection(1);
           setSelectedOption(null);
           setCurrentIndex((prev) => prev + 1);
         }, 500);
       } else {
-        // Last question: save immediately without setTimeout
+        // 마지막 질문: setTimeout 없이 직접 await
         setIsSubmitting(true);
 
         try {
           const creatorId = nanoid();
+          console.log('[Play] Creating session...');
           const session = await createSession(creatorId, setId);
+          console.log('[Play] Session created:', session.shareCode);
 
-          // Save creator answers (batch write) - must complete before navigation
+          // 답변 저장 - questionId로 매핑 (순서 의존 X)
           const answerPayloads = questions.map((q, idx) => ({
             questionId: q.id,
             selectedOption: newAnswers[idx] as 'A' | 'B',
           }));
-          await saveAnswers(session.id, 'creator', answerPayloads);
-          console.log('[Play] Creator answers saved for session:', session.shareCode);
 
+          console.log('[Play] Saving answers...');
+          await saveAnswers(session.id, 'creator', answerPayloads);
+          console.log('[Play] Answers saved!');
+
+          // playCount는 실패해도 무시
           try { await incrementPlayCount(setId); } catch {}
 
+          // 모든 저장이 완료된 후에만 이동
           router.push(`/share/${session.id}`);
         } catch (err) {
-          console.error('Failed to save session:', err);
+          console.error('[Play] SAVE FAILED:', err);
           setIsSubmitting(false);
           alert('저장에 실패했습니다. 다시 시도해주세요.');
         }

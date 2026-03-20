@@ -40,17 +40,20 @@ export default function RespondentPage({ params }: RespondentPageProps) {
   useEffect(() => {
     async function loadSession() {
       try {
+        console.log('[Respondent] Loading session for shareCode:', shareCode);
         const s = await getSessionByShareCode(shareCode);
         if (!s) {
           setError('테스트를 찾을 수 없어요');
           setLoading(false);
           return;
         }
+        console.log('[Respondent] Session found:', s.id, 'setId:', s.questionSetId);
         setSession(s);
         const qs = getQuestionsBySetId(s.questionSetId);
+        // 셔플하지 않음! 출제자와 같은 순서로 봐야 함
         setQuestions(qs);
       } catch (err) {
-        console.error('Failed to load session:', err);
+        console.error('[Respondent] Failed to load session:', err);
         setError('세션을 불러올 수 없어요');
       }
       setLoading(false);
@@ -78,23 +81,37 @@ export default function RespondentPage({ params }: RespondentPageProps) {
       setAnswers(newAnswers);
 
       if (currentIndex < questions.length - 1) {
+        // 다음 질문: setTimeout은 애니메이션용으로만
         setTimeout(() => {
           setSelectedOption(null);
           setCurrentIndex((prev) => prev + 1);
         }, 500);
       } else {
-        // Last question: save immediately without setTimeout
+        // 마지막 질문: setTimeout 없이 직접 await
         setStage('calculating');
+
         try {
           const answerPayloads = questions.map((q, idx) => ({
             questionId: q.id,
             selectedOption: newAnswers[idx] as 'A' | 'B',
           }));
-          await saveAnswers(session.id, 'respondent', answerPayloads, respondentId);
-          console.log('[Respondent] Answers saved for session:', session.id);
 
+          console.log('[Respondent] Saving answers...');
+          await saveAnswers(session.id, 'respondent', answerPayloads, respondentId);
+          console.log('[Respondent] Answers saved!');
+
+          // 잠시 대기 (Firestore 반영 시간)
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          console.log('[Respondent] Getting all answers...');
           const allAnswers = await getAnswers(session.id, respondentId);
-          console.log('[Respondent] Got answers - creator:', allAnswers.creator.length, 'respondent:', allAnswers.respondent.length);
+          console.log('[Respondent] Creator:', allAnswers.creator.length, 'Respondent:', allAnswers.respondent.length);
+
+          if (allAnswers.creator.length === 0) {
+            console.error('[Respondent] No creator answers found!');
+            setError('출제자의 답변을 찾을 수 없어요. 다시 시도해주세요.');
+            return;
+          }
 
           const result = calculateSyncRate(
             allAnswers.creator,
@@ -102,6 +119,7 @@ export default function RespondentPage({ params }: RespondentPageProps) {
             questions
           );
 
+          console.log('[Respondent] SyncRate:', result.syncRate);
           await saveResult(session.id, {
             respondentId,
             respondentName: nickname.trim(),
@@ -112,9 +130,10 @@ export default function RespondentPage({ params }: RespondentPageProps) {
             summaryText: result.summaryText,
           });
 
+          console.log('[Respondent] Result saved! Navigating...');
           router.push(`/result/${session.id}?rid=${respondentId}`);
         } catch (err) {
-          console.error('Failed to save respondent data:', err);
+          console.error('[Respondent] SAVE FAILED:', err);
           alert('결과 저장에 실패했습니다. 다시 시도해주세요.');
           setStage('playing');
         }
@@ -229,7 +248,7 @@ export default function RespondentPage({ params }: RespondentPageProps) {
           className="text-5xl mb-4"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={{ type: 'spring' as const, stiffness: 300, damping: 20 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         >
           ✏️
         </motion.div>
@@ -247,7 +266,7 @@ export default function RespondentPage({ params }: RespondentPageProps) {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          결과에서 이 이름으로 표시돼요
+          결과에서 내 이름으로 표시돼요
         </motion.p>
 
         <motion.div
@@ -274,7 +293,7 @@ export default function RespondentPage({ params }: RespondentPageProps) {
             onClick={handleNicknameSubmit}
             disabled={nickname.trim().length === 0}
           >
-            다음 →
+            다음
           </button>
         </motion.div>
       </div>
@@ -324,7 +343,7 @@ export default function RespondentPage({ params }: RespondentPageProps) {
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
-            transition={{ type: 'spring' as const, stiffness: 300, damping: 30 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="flex flex-col items-center gap-8"
           >
             <h2 className="text-xl font-bold text-gray-900 text-center leading-relaxed px-2">
