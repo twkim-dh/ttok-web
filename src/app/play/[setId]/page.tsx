@@ -30,8 +30,7 @@ export default function PlayPage({ params }: PlayPageProps) {
     const qs = getQuestionsBySetId(setId);
     const set = getQuestionSetById(setId);
     // Shuffle questions randomly each time
-    const shuffled = [...qs].sort(() => Math.random() - 0.5);
-    setQuestions(shuffled);
+    setQuestions(qs);
     setQuestionSet(set);
   }, [setId]);
 

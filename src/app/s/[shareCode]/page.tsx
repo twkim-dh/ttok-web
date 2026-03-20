@@ -48,8 +48,7 @@ export default function RespondentPage({ params }: RespondentPageProps) {
         }
         setSession(s);
         const qs = getQuestionsBySetId(s.questionSetId);
-        const shuffled = [...qs].sort(() => Math.random() - 0.5);
-        setQuestions(shuffled);
+        setQuestions(qs);
       } catch (err) {
         console.error('Failed to load session:', err);
         setError('세션을 불러올 수 없어요');
@@ -78,44 +77,48 @@ export default function RespondentPage({ params }: RespondentPageProps) {
       const newAnswers = [...answers, option];
       setAnswers(newAnswers);
 
-      setTimeout(async () => {
-        if (currentIndex < questions.length - 1) {
+      if (currentIndex < questions.length - 1) {
+        setTimeout(() => {
           setSelectedOption(null);
           setCurrentIndex((prev) => prev + 1);
-        } else {
-          setStage('calculating');
+        }, 500);
+      } else {
+        // Last question: save immediately without setTimeout
+        setStage('calculating');
+        try {
+          const answerPayloads = questions.map((q, idx) => ({
+            questionId: q.id,
+            selectedOption: newAnswers[idx] as 'A' | 'B',
+          }));
+          await saveAnswers(session.id, 'respondent', answerPayloads, respondentId);
+          console.log('[Respondent] Answers saved for session:', session.id);
 
-          try {
-            const answerPayloads = questions.map((q, idx) => ({
-              questionId: q.id,
-              selectedOption: newAnswers[idx] as 'A' | 'B',
-            }));
-            await saveAnswers(session.id, 'respondent', answerPayloads, respondentId);
+          const allAnswers = await getAnswers(session.id, respondentId);
+          console.log('[Respondent] Got answers - creator:', allAnswers.creator.length, 'respondent:', allAnswers.respondent.length);
 
-            const allAnswers = await getAnswers(session.id, respondentId);
-            const result = calculateSyncRate(
-              allAnswers.creator,
-              allAnswers.respondent,
-              questions
-            );
+          const result = calculateSyncRate(
+            allAnswers.creator,
+            allAnswers.respondent,
+            questions
+          );
 
-            await saveResult(session.id, {
-              respondentId,
-              respondentName: nickname.trim(),
-              syncRate: result.syncRate,
-              totalQuestions: result.totalQuestions,
-              matchedCount: result.matchedCount,
-              categoryScores: result.categoryScores,
-              summaryText: result.summaryText,
-            });
+          await saveResult(session.id, {
+            respondentId,
+            respondentName: nickname.trim(),
+            syncRate: result.syncRate,
+            totalQuestions: result.totalQuestions,
+            matchedCount: result.matchedCount,
+            categoryScores: result.categoryScores,
+            summaryText: result.summaryText,
+          });
 
-            router.push(`/result/${session.id}?rid=${respondentId}`);
-          } catch (err) {
-            console.error('Failed to save respondent data:', err);
-            setError('결과 저장에 실패했어요');
-          }
+          router.push(`/result/${session.id}?rid=${respondentId}`);
+        } catch (err) {
+          console.error('Failed to save respondent data:', err);
+          alert('결과 저장에 실패했습니다. 다시 시도해주세요.');
+          setStage('playing');
         }
-      }, 500);
+      }
     },
     [selectedOption, session, answers, currentIndex, questions, router, respondentId, nickname]
   );

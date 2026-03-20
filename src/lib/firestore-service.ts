@@ -221,6 +221,13 @@ export async function saveAnswers(
   const results = await Promise.all(restPromises);
   const savedCount = results.filter(Boolean).length;
   console.log(`[REST] Answers saved: ${savedCount}/${fullAnswers.length}, userType: ${userType}`);
+
+  if (savedCount === 0) {
+    throw new Error(`All ${fullAnswers.length} answers failed to save to Firestore`);
+  }
+  if (savedCount < fullAnswers.length) {
+    console.warn(`[REST] Warning: only ${savedCount}/${fullAnswers.length} answers saved`);
+  }
 }
 
 // ---------------------------------------------------------------------------
