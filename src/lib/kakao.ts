@@ -70,7 +70,7 @@ export function shareTest(questionSet: QuestionSet, shareCode: string): void {
     content: {
       title: "나를 얼마나 잘 알아? \uD83C\uDFAF",
       description: `${questionSet.title} - 취향 싱크로율 확인하기`,
-      imageUrl: `${baseUrl}/og-v2.png`,
+      imageUrl: "https://ttok.dhlm-studio.com/og-share.png?v=2",
       link: {
         mobileWebUrl: shareUrl,
         webUrl: shareUrl,
@@ -108,7 +108,7 @@ export function shareResult(
     content: {
       title: `우리 싱크로율 ${syncRate}%! ${badge}`,
       description: "우리의 취향 궁합을 확인해보세요!",
-      imageUrl: `${baseUrl}/og-v2.png`,
+      imageUrl: "https://ttok.dhlm-studio.com/og-share.png?v=2",
       link: {
         mobileWebUrl: resultUrl,
         webUrl: resultUrl,
