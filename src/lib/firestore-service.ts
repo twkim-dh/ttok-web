@@ -132,21 +132,35 @@ export async function createSession(
 export async function getSessionByShareCode(
   shareCode: string
 ): Promise<Session | null> {
-  // Try Firestore first (cross-device)
-  if (isFirebaseConfigured && db) {
-    try {
-      const q = query(
-        collection(db, "sessions"),
-        where("shareCode", "==", shareCode)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        console.log("[Firestore] Session found for shareCode:", shareCode);
-        return snap.docs[0].data() as Session;
+  // Try REST API first (cross-device)
+  try {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:runQuery`;
+    const structuredQuery = {
+      from: [{ collectionId: "sessions" }],
+      where: { fieldFilter: { field: { fieldPath: "shareCode" }, op: "EQUAL", value: { stringValue: shareCode } } },
+      limit: 1,
+    };
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ structuredQuery }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.length > 0 && data[0].document) {
+        const fields = data[0].document.fields;
+        const session: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(fields)) {
+          const val = v as Record<string, unknown>;
+          if (val.stringValue !== undefined) session[k] = val.stringValue;
+          else if (val.integerValue !== undefined) session[k] = Number(val.integerValue);
+        }
+        console.log("[REST] Session found for shareCode:", shareCode);
+        return session as unknown as Session;
       }
-    } catch (err) {
-      console.error("[Firestore] Query failed:", err);
     }
+  } catch (err) {
+    console.error("[REST] getSessionByShareCode failed:", err);
   }
 
   // localStorage fallback (same device)
