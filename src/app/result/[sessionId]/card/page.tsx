@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import ResultCard from '@/components/ResultCard';
-import { getResult } from '@/lib/firestore-service';
+import { getResult, getSession } from '@/lib/firestore-service';
 import { getQuestionSetById } from '@/data/questions';
 import { getBadge } from '@/lib/result-calculator';
 import type { Result } from '@/types';
@@ -38,7 +38,7 @@ export default function CardPage({ params }: CardPageProps) {
         setResult(r);
 
         if (r) {
-          const session = getSessionFromStorage(sessionId);
+          const session = await getSession(sessionId) || getSessionFromStorage(sessionId);
           const setId = session?.questionSetId || '';
           const qSet = getQuestionSetById(setId);
           setQuestionSetTitle(qSet ? `${qSet.emoji} ${qSet.title}` : '취향 테스트');
